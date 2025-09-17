@@ -1,0 +1,9 @@
+/* frontend/src/app.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    background-color: #f8fafc; /* slate-50 */
+    font-family: 'Inter', sans-serif;
+}

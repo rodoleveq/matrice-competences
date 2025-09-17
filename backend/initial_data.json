@@ -1,0 +1,135 @@
+{
+    "ranks": ["Consultant (CP/RO Junior)", "Senior (CP/RO)", "Lead (CP/RO confirmé / SDM)", "Principal (DP / SDM Senior)", "Expert Director (DP/SDM Expert)"],
+    "pillars": [
+        {
+            "name": "1. Gestion de Projet",
+            "colorClasses": { "bg": "bg-blue-50", "text": "text-blue-800" },
+            "items": [
+                {
+                    "type": "Progression (Eagle)",
+                    "values": [
+                        "**Applique** des tâches définies sur un périmètre restreint.<br/>(*Autonomie :* Cadrée)",
+                        "**Organise et suit** un projet simple ou un lot.<br/>(*Complexité :* Moyenne)",
+                        "**Pilote** un projet à engagement ou un service.<br/>(*Complexité :* Élevée)",
+                        "**Dirige** un projet complexe, un portefeuille ou un CDS.<br/>(*Complexité :* Très élevée)",
+                        "**Définit la stratégie** de Delivery d'un compte ou d'une BU.<br/>(*Complexité :* Stratégique)"
+                    ]
+                },
+                {
+                    "type": "Activités (Fiches)",
+                    "values": [
+                        "- Met à jour les outils de suivi.<br/>- Prépare les supports de COPRO.",
+                        "- Élabore le planning détaillé (WBS).<br/>- Identifie les risques et tient le registre.",
+                        "- Définit et met en place la gouvernance (COPIL).<br/>- Pilote par les risques et les plans de mitigation.",
+                        "- Dirige des projets à forts enjeux.<br/>- Gère les crises et les escalades.<br/>- Pilote plusieurs projets/équipes.",
+                        "- Est garant des engagements sur un large portefeuille.<br/>- Définit les standards méthodologiques."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "2. Gestion de Services",
+            "colorClasses": { "bg": "bg-emerald-50", "text": "text-emerald-800" },
+            "items": [
+                 {
+                    "type": "Progression (Eagle)",
+                    "values": [
+                        "**Applique** les procédures (ex: ITIL Incident).<br/>(*Qualité :* Respecte les processus)",
+                        "**Suit** la performance d'un service (SLA).<br/>(*Relation Client :* Opérationnelle)",
+                        "**Pilote** un service et est garant des engagements (SLA).<br/>(*Leadership :* Gère l'équipe Run)",
+                        "**Dirige** un Centre de Services (CDS) ou un service critique.<br/>(*Business Acumen :* Industrialisation)",
+                        "**Définit la stratégie** de \"Run\" d'un compte.<br/>(*Impact :* Optimisation des modèles)"
+                    ]
+                },
+                {
+                    "type": "Activités (Fiches)",
+                    "values": [
+                       "- Traite les tickets/demandes.<br/>- Applique les consignes d'exploitation.",
+                       "- Suit et rapporte les indicateurs (SLA/OLA).<br/>- Participe à la gestion des problèmes.",
+                       "- Est garant du respect des SLA.<br/>- Anime les comités de suivi de service.<br/>- Pilote le plan d'amélioration continue.",
+                       "- Pilote un périmètre de MCO complexe.<br/>- Définit le catalogue de services.<br/>- Gère les crises de service.",
+                       "- Définit les modèles de \"delivery\" (automatisation).<br/>- Négocie les contrats de service majeurs."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "3. Gestion Financière",
+            "colorClasses": { "bg": "bg-amber-50", "text": "text-amber-800" },
+            "items": [
+                 {
+                    "type": "Progression (Eagle)",
+                    "values": [
+                        "**Suit** ses imputations et comprend les livrables.<br/>(*Qualité :* Respecte les processus)",
+                        "**Construit et suit** le budget d'un projet.<br/>(*Autonomie :* Gère son périmètre)",
+                        "**Est responsable** du P&L (marge, SFP) d'un projet/service.<br/>(*Autonomie :* Gère le financier)",
+                        "**Pilote** le P&L d'un portefeuille ou d'un contrat majeur.<br/>(*Business Acumen :* Optimise la marge)",
+                        "**Définit la stratégie** financière et contractuelle d'un compte.<br/>(*Impact :* Garant de la rentabilité BU)"
+                    ]
+                },
+                {
+                    "type": "Activités (Fiches)",
+                    "values": [
+                       "- Remonte les éléments de suivi (CRA).<br/>- Participe au suivi des livrables.",
+                       "- Élabore le budget initial (charges, coûts).<br/>- Suit le \"Reste à Faire\".<br/>- Prépare la facturation.",
+                       "- Assure la gestion financière (Marge, SFP).<br/>- Identifie les écarts et propose des actions.<br/>- Gère le contrat (niveau 1).",
+                       "- Construit le forecast du portefeuille.<br/>- Pilote les leviers de rentabilité.<br/>- Négocie les avenants.",
+                       "- Est garant du P&L global.<br/>- Mène les négociations de contrats cadres.<br/>- Définit les modèles de \"pricing\"."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "4. Leadership",
+            "colorClasses": { "bg": "bg-violet-50", "text": "text-violet-800" },
+            "items": [
+                 {
+                    "type": "Progression (Eagle)",
+                    "values": [
+                        "**Communique** clairement sur ses tâches.<br/>(*Autonomie :* Sait quand alerter)",
+                        "**Anime** son périmètre et communique pro-activement.<br/>(*Client :* Gère la relation quotidienne)",
+                        "**Fédère** l'équipe projet/service.<br/>(*Leadership :* Fédère l'équipe)",
+                        "**Manage** des équipes (parfois des Leads) et négocie.<br/>(*Leadership :* Gère des managers)",
+                        "**Inspire**, coache les managers et porte la vision stratégique.<br/>(*Leadership :* Thought Leader)"
+                    ]
+                },
+                {
+                    "type": "Activités (Fiches)",
+                    "values": [
+                       "- Fait preuve de **Rigueur**.<br/>- Communique à l'écrit et à l'oral.",
+                       "- Fait preuve de **Sens de l'organisation**.<br/>- Gère la relation client opérationnelle.",
+                       "- Fait preuve de **Force de proposition**.<br/>- Gère les conflits (niveau 1).<br/>- Motive l'équipe.",
+                       "- Sait **déléguer** et **gérer le stress**.<br/>- Mène des **négociations** complexes.<br/>- Gère les situations à forte pression.",
+                       "- Fait preuve de **Charisme** et **Persuasion**.<br/>- Coache les DP/SDM et développe les talents.<br/>- Gère la relation C-Level."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "5. Écosystème Devoteam",
+            "colorClasses": { "bg": "bg-rose-50", "text": "text-rose-800" },
+            "items": [
+                 {
+                    "type": "Progression (Eagle)",
+                    "values": [
+                        "**Connaît et applique** les processus internes.<br/>(*Qualité :* Respecte le SMI)",
+                        "**S'implique** dans l'entité et connaît les offres proches.<br/>(*Implication :* Participe aux REX)",
+                        "**S'appuie** sur l'écosystème et est ambassadeur.<br/>(*Implication :* Ambassadeur)",
+                        "**Contribue** activement au business (Avant-vente, Upsell).<br/>(*Implication :* Moteur sur les offres)",
+                        "**Influence** la stratégie des offres et est \"Thought Leader\".<br/>(*Implication :* Responsable de communauté)"
+                    ]
+                },
+                {
+                    "type": "Activités (Fiches)",
+                    "values": [
+                       "- Applique rigoureusement les processus SMI.<br/>- Connaît les valeurs.",
+                       "- Participe au développement de l'entité (REX, cooptation).<br/>- Sait présenter les offres locales.",
+                       "- Participe au recrutement (entretiens).<br/>- Est ambassadeur chez le client.<br/>- Sollicite les VAs / Piliers.",
+                       "- Est moteur sur les avant-ventes complexes.<br/>- Développe l'upsell et le cross-sell.<br/>- Sait communiquer la stratégie.",
+                       "- Est \"Thought Leader\" interne et externe.<br/>- Influence la stratégie des offres.<br/>- Développe le business stratégique."
+                    ]
+                }
+            ]
+        }
+    ]
+}
