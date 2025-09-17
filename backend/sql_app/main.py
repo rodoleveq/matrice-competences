@@ -14,6 +14,8 @@ app = FastAPI(title="Clarté API")
 origins = [
     "http://localhost:5173", # Adresse par défaut de SvelteKit en dev
     "http://localhost:3000", # Autre adresse commune
+    "*",                     # Le symbole "*" autorise toutes les origines (tous les sites web)
+
 ]
 app.add_middleware(
     CORSMiddleware,
