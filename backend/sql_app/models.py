@@ -16,8 +16,11 @@ class Pillar(Base):
     position = Column(Integer)
     color_bg = Column(String)
     color_text = Column(String)
+    color_accent = Column(String)
+    color_icon = Column(String)
+    color_border = Column(String)
     items = relationship("Item", back_populates="pillar", cascade="all, delete-orphan")
-
+    
 class Item(Base):
     __tablename__ = "items"
     id = Column(Integer, primary_key=True, index=True)

@@ -1,18 +1,14 @@
 <script>
 	import { onMount } from 'svelte';
 	import { getMatrixData, saveMatrixData } from '$lib/api.js';
+    // Importez le nouveau composant
+	import ProgressionCell from '$lib/components/ProgressionCell.svelte';
 
-	// Variable pour stocker les données de la matrice
-	let matrixData = {
-		ranks: [],
-		pillars: []
-	};
-
-	let activeTab = 'restitution'; // 'restitution' ou 'gestion'
+	let matrixData = { ranks: [], pillars: [] };
+	let activeTab = 'restitution';
 	let isLoading = true;
 	let errorMessage = '';
 
-	// Au chargement du composant, on appelle l'API pour récupérer les données
 	onMount(async () => {
 		try {
 			matrixData = await getMatrixData();
@@ -34,14 +30,13 @@
 		}
 	}
     
-    // Fonctions pour l'administration
 	function addPillar() {
         const newValues = Array(matrixData.ranks.length).fill('');
 		matrixData.pillars = [
 			...matrixData.pillars,
 			{
 				name: 'Nouveau Pilier',
-				colorClasses: { bg: 'bg-gray-50', text: 'text-gray-800' },
+				colorClasses: { bg: 'bg-gray-50', text: 'text-gray-800', accent: 'bg-gray-200', icon: 'text-gray-600', border: 'border-gray-200' },
 				items: [
 					{ type: 'Progression (Eagle)', values: [...newValues] },
 					{ type: 'Activités (Fiches)', values: [...newValues] }
@@ -64,33 +59,17 @@
 
 <main class="p-4 md:p-8">
 	<div class="max-w-full mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
-		<header class="bg-gray-800 text-white p-6">
+        <header class="bg-gray-800 text-white p-6">
 			<h1 class="text-2xl font-bold">Filière "Delivery Manager"</h1>
 			<p class="text-gray-300 mt-1">Matrice de compétences interactive</p>
 		</header>
 
 		<div class="border-b border-gray-200">
 			<nav class="flex -mb-px px-6">
-				<button
-					on:click={() => (activeTab = 'restitution')}
-					class="py-4 px-1 border-b-2 text-sm font-medium"
-					class:text-blue-600={activeTab === 'restitution'}
-                    class:border-blue-600={activeTab === 'restitution'}
-                    class:font-semibold={activeTab === 'restitution'}
-					class:text-slate-600={activeTab !== 'restitution'}
-                    class:border-transparent={activeTab !== 'restitution'}
-				>
+				<button on:click={() => (activeTab = 'restitution')} class="py-4 px-1 border-b-2 text-sm font-medium" class:text-blue-600={activeTab === 'restitution'} class:border-blue-600={activeTab === 'restitution'} class:font-semibold={activeTab === 'restitution'} class:text-slate-600={activeTab !== 'restitution'} class:border-transparent={activeTab !== 'restitution'}>
 					Restitution
 				</button>
-				<button
-					on:click={() => (activeTab = 'gestion')}
-					class="py-4 px-1 ml-8 border-b-2 text-sm font-medium"
-					class:text-blue-600={activeTab === 'gestion'}
-                    class:border-blue-600={activeTab === 'gestion'}
-                    class:font-semibold={activeTab === 'gestion'}
-					class:text-slate-600={activeTab !== 'gestion'}
-                    class:border-transparent={activeTab !== 'gestion'}
-				>
+				<button on:click={() => (activeTab = 'gestion')} class="py-4 px-1 ml-8 border-b-2 text-sm font-medium" class:text-blue-600={activeTab === 'gestion'} class:border-blue-600={activeTab === 'gestion'} class:font-semibold={activeTab === 'gestion'} class:text-slate-600={activeTab !== 'gestion'} class:border-transparent={activeTab !== 'gestion'}>
 					Gestion
 				</button>
 			</nav>
@@ -105,10 +84,11 @@
 					<p>{errorMessage}</p>
 				</div>
 			{:else}
+				<!-- Vue Restitution -->
 				{#if activeTab === 'restitution'}
 					<div class="overflow-x-auto">
-						<table class="min-w-full border-collapse text-sm">
-							<thead>
+						<table class="min-w-full border-collapse text-sm" style="border-spacing: 0 4px;">
+							<thead class="bg-gray-100 sticky top-0 z-10">
 								<tr>
 									<th class="p-3 font-semibold text-left text-gray-700 w-1/12">Pilier</th>
 									<th class="p-3 font-semibold text-left text-gray-700 w-1/12">Attendu</th>
@@ -120,15 +100,21 @@
 							<tbody>
 								{#each matrixData.pillars as pillar}
 									{#each pillar.items as item, itemIndex}
-										<tr class="border-b border-gray-200 {pillar.colorClasses.bg}">
+										<tr class="border-b-2 border-white {pillar.colorClasses.bg}">
 											{#if itemIndex === 0}
 												<td
-													class="p-3 font-bold {pillar.colorClasses.text} align-top border-l-4 border-gray-200"
+													class="p-3 font-bold {pillar.colorClasses.text} align-top border-l-4 {pillar.colorClasses.border}"
 													rowspan={pillar.items.length}>{pillar.name}</td>
 											{/if}
 											<td class="p-3 font-semibold text-gray-600 italic align-top">{item.type}</td>
 											{#each item.values as value}
-												<td class="p-3 text-gray-700 align-top">{@html value}</td>
+												{#if item.type.includes("Progression")}
+                                                    <td class="p-3 text-gray-700 align-top">
+                                                        <ProgressionCell text={value} colors={pillar.colorClasses} />
+                                                    </td>
+                                                {:else}
+                                                    <td class="p-3 text-gray-700 align-top">{@html value.replace(/<br\/>/g, '<br/><br/>')}</td>
+                                                {/if}
 											{/each}
 										</tr>
 									{/each}
@@ -138,6 +124,7 @@
 					</div>
 				{/if}
 
+				<!-- Vue Gestion -->
 				{#if activeTab === 'gestion'}
                     <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-700 p-4 rounded-md mb-6" role="alert">
                         <p class="font-bold">Mode Administration</p>
@@ -148,6 +135,7 @@
                         <button on:click={addPillar} class="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600">Ajouter un Pilier</button>
                     </div>
                     
+                    <!-- Formulaires d'édition -->
                     {#each matrixData.pillars as pillar, pillarIndex}
                         <div class="mb-6 border rounded-lg shadow-sm bg-white">
                              <div class="p-4 bg-gray-50 rounded-t-lg flex justify-between items-center">
@@ -160,7 +148,7 @@
                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                 </button>
                             </div>
-                            <div class="p-4 grid grid-cols-{matrixData.ranks.length} gap-4">
+                            <div class="p-4 grid grid-cols-1 md:grid-cols-{matrixData.ranks.length} gap-4">
                                 {#each pillar.items as item}
                                     {#each item.values as value, valueIndex}
                                         <div class="mt-2 flex flex-col">
@@ -181,3 +169,4 @@
 		</div>
 	</div>
 </main>
+
