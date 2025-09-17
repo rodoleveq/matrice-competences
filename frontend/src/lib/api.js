@@ -1,5 +1,6 @@
 // L'adresse de base de notre API. On pourra la changer facilement pour la production.
-const BASE_URL = 'http://127.0.0.1:8000';
+// const BASE_URL = 'http://127.0.0.1:8000';
+const BASE_URL = 'https://matrice-api.onrender.com';
 
 /**
  * Récupère les données complètes de la matrice depuis le backend.
