@@ -1,2 +1,6 @@
 # Ignore la base de données locale
 matrix.db
+# Environnement virtuel Python (tests)
+.venv/
+__pycache__/
+.pytest_cache/
