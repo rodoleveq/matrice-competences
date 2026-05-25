@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+*.egg-info/
+
+# Node / Svelte
+node_modules/
+.svelte-kit/
+build/
+dist/
