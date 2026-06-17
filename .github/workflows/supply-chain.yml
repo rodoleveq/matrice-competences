@@ -1,0 +1,155 @@
+name: Supply-Chain Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  bumblebee:
+    name: Bumblebee scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: false
+
+      - name: Install Bumblebee
+        run: go install github.com/perplexityai/bumblebee/cmd/bumblebee@latest
+
+      - name: Scan packages
+        run: |
+          ~/go/bin/bumblebee scan \
+            --profile deep \
+            --root . \
+            --output file \
+            --output-file packages.ndjson
+
+      - name: Build OSV exposure catalog
+        run: |
+          python3 << 'PYEOF'
+          import json, time, urllib.request, urllib.error
+          from collections import defaultdict
+
+          ECOSYSTEM_MAP = {"npm": "npm", "pypi": "PyPI", "go": "Go",
+                           "rubygems": "RubyGems", "packagist": "Packagist"}
+          OSV_BATCH     = "https://api.osv.dev/v1/querybatch"
+          BATCH_SIZE    = 1000
+
+          # Extraire les packages uniques
+          seen, packages = set(), []
+          with open("packages.ndjson") as f:
+              for line in f:
+                  r = json.loads(line.strip())
+                  if r.get("record_type") != "package": continue
+                  eco, name, ver = r.get("ecosystem",""), r.get("package_name",""), r.get("version","")
+                  if not (eco and name and ver) or eco not in ECOSYSTEM_MAP: continue
+                  key = (eco, name, ver)
+                  if key not in seen:
+                      seen.add(key)
+                      packages.append({"ecosystem": eco, "name": name, "version": ver})
+
+          print(f"  {len(packages)} packages uniques à interroger")
+
+          # Batch query OSV
+          def post(payload):
+              data = json.dumps(payload).encode()
+              req  = urllib.request.Request(OSV_BATCH, data=data,
+                        headers={"Content-Type": "application/json"}, method="POST")
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return json.loads(r.read())
+
+          groups = defaultdict(list)
+          queries = [(i, p) for i, p in enumerate(packages) if p["ecosystem"] in ECOSYSTEM_MAP]
+
+          for start in range(0, len(queries), BATCH_SIZE):
+              batch = queries[start:start+BATCH_SIZE]
+              payload = {"queries": [{"version": p["version"],
+                  "package": {"name": p["name"], "ecosystem": ECOSYSTEM_MAP[p["ecosystem"]]}}
+                  for _, p in batch]}
+              try:
+                  resp = post(payload)
+              except Exception as e:
+                  print(f"  WARNING batch {start}: {e}")
+                  continue
+              for j, result in enumerate(resp.get("results", [])):
+                  for v in result.get("vulns", []):
+                      _, pkg = batch[j]
+                      key = (v["id"], pkg["ecosystem"], pkg["name"])
+                      groups[key].append(pkg["version"])
+              if start + BATCH_SIZE < len(queries):
+                  time.sleep(0.3)
+
+          entries = [{"id": vid, "ecosystem": eco, "package": name,
+                      "versions": sorted(set(vers))}
+                     for (vid, eco, name), vers in sorted(groups.items())]
+          with open("catalog.json", "w") as f:
+              json.dump({"schema_version": "0.1.0", "entries": entries}, f)
+          print(f"  {len(entries)} entrées CVE générées")
+          PYEOF
+
+      - name: Scan with catalog (findings only)
+        run: |
+          ~/go/bin/bumblebee scan \
+            --profile deep \
+            --root . \
+            --exposure-catalog catalog.json \
+            --findings-only \
+            --output file \
+            --output-file findings.ndjson
+
+      - name: Check for critical vulnerabilities
+        run: |
+          python3 << 'PYEOF'
+          import json, sys
+
+          findings = []
+          with open("findings.ndjson") as f:
+              for line in f:
+                  r = json.loads(line.strip())
+                  if r.get("record_type") == "finding":
+                      findings.append(r)
+
+          # Résumé par sévérité
+          from collections import Counter
+          sev = Counter(f.get("severity","") for f in findings)
+          print(f"  Findings: critical={sev.get('critical',0)}  high={sev.get('high',0)}"
+                f"  moderate={sev.get('moderate',0)}  low={sev.get('low',0)}")
+
+          # Dédupliquer les critiques
+          seen, criticals = set(), []
+          for f in findings:
+              if f.get("severity") != "critical": continue
+              key = (f.get("package_name"), f.get("version"), f.get("catalog_id"))
+              if key not in seen:
+                  seen.add(key)
+                  criticals.append(f)
+
+          if criticals:
+              print(f"\n❌ {len(criticals)} vulnérabilité(s) CRITIQUE(S) :\n")
+              for f in sorted(criticals, key=lambda x: x.get("package_name","")):
+                  print(f"  {f['package_name']}@{f['version']}")
+                  print(f"    {f.get('catalog_id','')}  {f.get('catalog_name','')[:70]}")
+              print("\nMets à jour les dépendances avant de merger.")
+              sys.exit(1)
+
+          print("✅ Aucune vulnérabilité critique.")
+          PYEOF
+
+      - name: Upload findings artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bumblebee-findings-${{ github.sha }}
+          path: |
+            findings.ndjson
+            catalog.json
+          retention-days: 30
