@@ -70,6 +70,14 @@
 4. Verifier build + tests passent
 5. Laisser `git status` propre (ou expliciter ce qui doit l'etre)
 
+### 2.3bis Discipline des fichiers d'etat
+
+- `STATE.md` decrit l'etat fonctionnel et le dernier controle connu ; il ne doit pas pretendre etre le registre exact du commit courant.
+- Git reste la source de verite pour les SHA, l'alignement exact local/distant et l'historique.
+- Eviter les formulations fragiles du type "`main` et `origin/main` sont alignes au commit X" comme verite durable, car le commit qui modifie `STATE.md` rend cette phrase obsolete.
+- Preferer documenter une "derniere verification distante" datee, le resultat fonctionnel observe, et les commandes permettant de verifier l'etat exact (`git status --short --branch`, `git rev-parse HEAD`, `git rev-parse origin/main`).
+- Apres commit/push, verifier Git directement plutot que modifier `STATE.md` uniquement pour actualiser un SHA.
+
 ### 2.4 Discipline d'Optimisation de Tokens (RTK)
 
 - **Usage Obligatoire** de `rtk` pour filtrer ou emballer les sorties de commandes verbeuses :
@@ -282,9 +290,140 @@ chore(ci): update GitHub Actions workflow
 
 ---
 
+## 7bis. CI/CD — GitHub Actions
+
+> Filet de sécurité : à chaque push/PR, un runner neutre compile + lint + teste. Attrape ce que le poste local masque (ex. dérive de toolchain).
+
+Fichier `.github/workflows/ci.yml` : un job par stack, `runs-on: ubuntu-latest` (Linux ×1 ; **jamais macOS ×10** sauf iOS). Toujours `actions/cache` (coût + vitesse) et actions épinglées (`@v4`). `permissions: { contents: read }`.
+
+| Stack | Gate CI |
+|-------|---------|
+| Rust/Tauri | `cargo clippy --all-targets -- -D warnings` + `cargo test` (apt : `libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev`) |
+| Node/Svelte | `pnpm check` + `pnpm test:unit` |
+| Python | `ruff check` + `pytest` |
+| iOS/Swift | `xcodebuild test` (runner macOS, ×10) |
+
+**Pièges vécus** :
+- `@stable` installe le dernier toolchain → un nouveau lint peut rougir du code valide. Corriger ponctuellement, ou épingler la version pour reproductibilité.
+- `cargo fmt --check` : à n'ajouter que si le repo est déjà 100 % fmt-clean (sinon échec global).
+
+**Coût** : repo privé = 2000 min/mois offertes (Free), public = illimité. **Rendre bloquant** : branch protection sur `main` → *Require status checks*.
+
+---
+
+## 7ter. Supply-Chain Security — Vérifications Périodiques
+
+> Cadence : **mensuelle** (ou ad-hoc si une CVE majeure est annoncée).  
+> Objectif : détecter les packages vulnérables, dépendances compromises et extensions dangereuses **avant** qu'elles n'atteignent la production.  
+> Philosophie : deux niveaux complémentaires — **inventaire** (Bumblebee, read-only, sans réseau) + **lookup CVE** (outils natifs, en ligne).
+
+### Niveau 1 — Inventaire Global (Bumblebee)
+
+Bumblebee scanne **tous les projets de `~/DEV/`** en read-only (pas d'exécution de packages).  
+Binary : `~/go/bin/bumblebee` (v0.1.1+). Résultats : `~/DEV/99-HORS\ SCOPE/bumblebee-scans/`.
+
+# Scan complet — 3 profils (à lancer depuis n'importe où)
+SCAN_DIR=~/DEV/99-HORS\ SCOPE/bumblebee-scans
+bumblebee scan --profile baseline --root ~/DEV --output file --output-file "$SCAN_DIR/baseline.ndjson"
+bumblebee scan --profile project  --root ~/DEV --output file --output-file "$SCAN_DIR/project.ndjson"
+bumblebee scan --profile deep     --root ~/DEV --output file --output-file "$SCAN_DIR/deep.ndjson"
+
+# Interroger les résultats (exemples)
+jq -r 'select(.record_type=="package" and .has_lifecycle_scripts==true) | .package_name' "$SCAN_DIR/baseline.ndjson" | sort -u
+
+| Profil | Scope | Cas d'usage |
+|--------|-------|-------------|
+| `baseline` | Répertoires racine connus (pnpm, npm, pip…) | Monitoring mensuel standard |
+| `project` | Lockfiles et manifests de projets | Vérification ciblée post-ajout de dépendance |
+| `deep` | Tous les répertoires accessibles | Incident response si CVE critique annoncée |
+
+### Niveau 2 — Lookup CVE par Écosystème (outils natifs)
+
+Ces outils consultent des bases CVE en ligne et **complètent** Bumblebee (qui est inventory-only sans catalog).
+
+| Écosystème | Outil | Commande |
+|------------|-------|----------|
+| npm / pnpm | `pnpm audit` | `cd <projet> && pnpm audit --audit-level moderate` |
+| npm (fallback) | `npm audit` | `cd <projet> && npm audit --audit-level moderate` |
+| Python (pip) | `pip-audit` | `pip-audit -r requirements.txt` |
+| Python (conda) | `pip-audit` | `pip-audit --require-hashes -r requirements.txt` |
+| Go | `govulncheck` | `cd <projet> && govulncheck ./...` |
+| Multi-écosystèmes | `osv-scanner` | `osv-scanner --recursive ~/DEV` |
+
+> **Installation one-shot** des outils manquants :
+> ```bash
+> pip install pip-audit          # Python
+> go install golang.org/x/vuln/cmd/govulncheck@latest  # Go
+> # osv-scanner : https://github.com/google/osv-scanner/releases
+> ```
+
+### Procédure Mensuelle (checklist agent)
+
+Quand un agent est chargé du scan mensuel supply-chain :
+
+1. [ ] Lancer les 3 profils Bumblebee sur `~/DEV/` (commandes ci-dessus)
+2. [ ] Pour chaque projet Node.js actif : `pnpm audit --audit-level moderate`
+3. [ ] Pour chaque projet Python actif : `pip-audit -r requirements.txt`
+4. [ ] Pour chaque projet Go actif : `govulncheck ./...`
+5. [ ] Stocker les résultats dans `~/DEV/99-HORS\ SCOPE/bumblebee-scans/YYYY-MM/`
+6. [ ] Mettre à jour le rapport HTML + `SCAN_SUMMARY.md`
+7. [ ] Si **findings > 0** : escalader à l'humain immédiatement (ne pas patcher sans accord)
+
+### Règles de Conduite
+
+- **Ne jamais patcher automatiquement** une dépendance vulnérable sans confirmation humaine
+- **Toujours archiver** les fichiers NDJSON bruts (preuve d'audit, comparaison future)
+- **En cas de CVE critique** (CVSS ≥ 9.0) annoncée publiquement → lancer un scan `deep` ad-hoc immédiatement
+- **Lifecycle scripts suspects** (`has_lifecycle_scripts: true`) → signaler à l'humain pour revue manuelle
+
+---
+
+## 7quater. Ponytail — Minimisation de Code (Lazy Senior Dev)
+
+> Objectif : tous les agents IA écrivent du code **minimal et nécessaire** (YAGNI, stdlib d'abord, pas d'abstraction non demandée).
+> Philosophie : « le meilleur code est celui qu'on n'écrit pas ». Installé en **plugin** sur chaque agent ; le ruleset s'injecte automatiquement à chaque session.
+> Repo : `DietrichGebert/ponytail` — version **4.7.0** — mode par défaut `full`.
+
+### État d'installation (vérifié 2026-06-19)
+
+| Agent | Méthode | Vérification |
+|-------|---------|--------------|
+| Claude Code | `claude plugin` (marketplace) | `claude plugin list \| grep ponytail` → `enabled` |
+| Codex | `codex plugin` (marketplace) | `codex plugin list \| grep ponytail` → `installed, enabled` |
+| Gemini CLI | `gemini extensions install` | `gemini extensions list \| grep ponytail` → `4.7.0` |
+| Antigravity (`agy`) | `agy plugin import gemini` | `agy plugin list` → import `ponytail` |
+| OpenCode | entrée `plugin` dans `~/.config/opencode/opencode.json` | tableau `plugin` contient `opencode-ponytail` |
+
+> ⚠️ **Piège (vérifié)** : installer/activer un plugin ne prend effet qu'au **redémarrage complet** de l'agent. Les sessions enfant / `--print` héritent du snapshot figé au lancement.
+> ⚠️ **Syntaxe Claude Code** : `claude plugin …` (CLI, sans slash). `claude /plugin …` (avec slash) n'existe qu'en session interactive.
+
+### Commandes (toutes plateformes)
+
+| Skill / commande | Effet |
+|------------------|-------|
+| `/ponytail [lite\|full\|ultra\|off]` | Afficher / changer le niveau de minimisation |
+| `/ponytail-review` | Revue du diff courant : ce qui est sur-conçu, à supprimer |
+| `/ponytail-audit` | Audit sur-ingénierie de tout le repo |
+| `/ponytail-debt` | Récolte les commentaires `ponytail:` (dette/raccourcis assumés) |
+| `/ponytail-gain` | Impact mesuré (code %, coût %, vitesse %) |
+| `/ponytail-help` | Aide complète |
+
+### Installation & validation
+
+Procédure détaillée + étapes de validation manuelle par agent :
+**`~/DEV/docs/superpowers/plans/2026-06-19-ponytail-multiagent-setup.md`**
+
+### Règles de Conduite
+
+- **Convention de code** : marquer une simplification délibérée par un commentaire `ponytail:` (ex. `// ponytail: global lock, per-account si besoin de débit`) — signale l'intention, pas l'ignorance.
+- **Désactivation** : seulement si une tâche l'exige (ex. prototype volontairement sur-équipé) → `/ponytail off`, justifier dans le message de commit, réactiver après.
+- **La sécurité n'est jamais coupée** : validation, gestion d'erreurs, garde-fous restent intacts (ponytail réduit le superflu, pas la robustesse).
+
+---
+
 ## 8. Workflow Multi-Agents CLI
 
-> Ce systeme repose sur 4 agents CLI : Claude Code, Gemini CLI, Codex CLI, Vibe (Mistral).
+> Ce systeme repose sur 6 agents CLI : Claude Code, Gemini CLI, Codex CLI, Vibe (Mistral), OpenCode, Antigravity (AGY).
 > L'humain orchestre. Les agents executent. Chaque agent lit `.AI_AGENTS.md` avant tout.
 
 ### Principes de Coordination
@@ -438,7 +577,69 @@ Un audit est un cycle structuré : diagnostic → recommandations → plan d'act
 > Format : `- [YYYY-MM-DD] [outil] : regle apprise`
 > Propager via `./sync-agents.sh` apres ajout.
 
-<!-- Aucune lecon enregistree pour l'instant. -->
+- [2026-06-24] [RTK] : RTK (0.42.4) n'a de hook PreToolUse automatique que pour Claude Code (`rtk hook claude` dans ~/.claude/settings.json). Les autres agents (Gemini, Codex, Vibe, OpenCode, AGY) ont les règles §2.4 + docs dédiées (RTK.md ou section dans GEMINI.md) et doivent appeler manuellement `rtk <cmd>` ou `rtk proxy`. Stats globales actives (75,7 % sur 10k+ cmds).
+- [2026-06-24] [ponytail] : 4.7.0 actif et vérifié sur Claude (plugin + .ponytail-active), Codex (marketplace + hooks), Gemini (config/plugins/ponytail hub avec cross intégrations), AGY (import gemini-cli), OpenCode (opencode-ponytail + .ponytail-active). Vibe n'a que le texte des règles (UNIVERSAL) — pas de plugin/skills dédié. Toujours redémarrer l'agent après enable.
+- [2026-06-24] [onboarding] : Protocole agent bien documenté (README + START_HERE.md), mais .AI_AGENTS.md est dotfile (invisible au ls normal). AGENTS.md non-dot aide la découverte. Pas de STATE.md racine ni checklist minimale "Agent Arrival". La reprise passe par OPERATIONS.md + healthcheck + HANDOFF explicites.
+- [2026-06-24] [gouvernance] : Cross-benefit excellent sur les règles et leçons (§11 + sync + @import + vault). Partiel sur les outils runtime (RTK auto seulement Claude ; ponytail par-agent). La source de vérité reste .AI_AGENTS.md ; les plugins/tools restent spécifiques à chaque harness.
+
+- [2026-05-30] [another-tool] : Une autre leçon pour tester le nettoyage automatique.
+
+- [2026-05-30] [test-tool] : Ceci est une leçon d'audit transverse hautement sécurisée.
+
+- [2026-05-30] [make] : `make doctor` detecte les venv herites d'un autre checkout — `make rebuild` corrige. Toujours utiliser `make verify` en debut de session.
+- [2026-05-30] [pytest] : Un import editable pointant vers un worktree supprime cause 26 erreurs de collection. Symptome : `ModuleNotFoundError` au collect. Correction : `make rebuild`.
+- [2026-05-30] [providers] : Le mock `patch("anthropic.Anthropic", ...)` fonctionne car `AnthropicBackend.__init__` fait `from anthropic import Anthropic`. Ne pas utiliser `patch("...backends.Anthropic")`.
+- [2026-05-30] [httpx] : `response.iter_lines()` retourne des strings (pas des bytes) dans httpx. Les tests SSE doivent mocker avec des strings, pas des `b"..."`.
+- [2026-05-30] [google-auth-httpx] : Le package `google-auth-httpx` n'existe pas sur PyPI. `GeminiOAuthBackend` utilise `google.auth.transport.requests.Request()` pour le refresh, et `httpx` pour les appels API streaming. Pas besoin d'adaptateur tiers.
+
+### [2026-05-29] Claude Code (subagent-driven-development) — CWD des sous-agents dans un worktree
+
+**Problème rencontré** : lors d'une session `subagent-driven-development` avec un worktree git, les sous-agents recevaient l'instruction `Work from: /chemin/worktree` en texte libre, mais leurs commandes shell s'exécutaient dans le répertoire courant du processus (le repo principal). Les `git commit` atterrissaient donc sur la mauvaise branche (le repo principal au lieu du worktree).
+
+**Règle permanente — Obligation pour tout dispatch de sous-agent sur worktree** :
+
+Le prompt d'un sous-agent implémenteur DOIT contenir un bloc de vérification CWD **au tout début**, avant toute instruction de travail :
+
+## ⚠️ Répertoire de travail OBLIGATOIRE
+
+AVANT TOUT, exécute ces commandes de vérification :
+
+cd /chemin/absolu/vers/le/worktree
+pwd          # doit afficher /chemin/absolu/vers/le/worktree
+git branch --show-current  # doit afficher "feature/ma-branche"
+
+Si l'un des deux résultats ne correspond pas → STOP, rapport NEEDS_CONTEXT immédiat.
+
+TOUTES tes commandes bash doivent commencer par :
+cd /chemin/absolu/vers/le/worktree && <commande>
+Ou utiliser le flag git : `git -C /chemin/absolu/vers/le/worktree <commande>`
+
+**Pourquoi** : le shell des sous-agents ne hérite pas du CWD de la session parente. Sans `cd` explicite en début de chaque commande, les commits, tests et fichiers créés peuvent atterrir dans n'importe quel répertoire — typiquement la racine du projet ou `~/.claude/`.
+
+**Impact si ignoré** : commits sur la mauvaise branche, historique git pollué, nécessité de cherry-pick ou rebase pour corriger.
+
+**Format recommandé dans le prompt du contrôleur** :
+Work from: /chemin/absolu/vers/le/worktree
+Branch: feature/ma-branche
+Venv: /chemin/absolu/vers/le/.venv/bin/python
+Run tests: cd /chemin/absolu/vers/le/worktree && /chemin/absolu/vers/le/.venv/bin/python -m pytest -q
+
+⚠️ Verify CWD before starting:
+  cd /chemin/absolu/vers/le/worktree && git branch --show-current
+  Must show "feature/ma-branche". If not: STOP and report NEEDS_CONTEXT.
+
+### [2026-05-30] Leçons Apprises — Projet `agentic-slide-factory`
+
+*   **[make] : Protection contre les venv fantômes**  
+    Dans les environnements multi-branches ou worktrees, `make doctor` permet de détecter les environnements virtuels obsolètes hérités d'un autre checkout ou d'un install editable pointant vers un worktree supprimé (qui cause des dizaines d'erreurs pytest insolubles au collect). L'usage de `make rebuild` permet de nettoyer proprement le `.venv` (déplacement vers la Corbeille macOS au lieu de `rm -rf` direct pour préserver les performances d'écriture) et de réinstaller proprement. Il est recommandé de lancer systématiquement `make verify` en début de session de codage.
+*   **[pytest] : Imports editables orphelins**  
+    Un paquet installé en editable (`pip install -e .`) dont le répertoire physique d'origine a été supprimé provoque 26 erreurs de collection pytest silencieuses (avec un `ModuleNotFoundError` au collect). Solution : Lancer `make rebuild` pour régénérer proprement les liens symboliques et le package local de métadonnées.
+*   **[providers] : Résolution des mocks unitaires Anthropic**  
+    Le mock global `patch("anthropic.Anthropic", ...)` fonctionne parfaitement car `AnthropicBackend.__init__` effectue l'import local `from anthropic import Anthropic`. Ne pas tenter de patcher localement `...backends.Anthropic`, qui échoue en raison du lazy loading de la dépendance.
+*   **[httpx] : Streaming SSE et mocking de types**  
+    La méthode `response.iter_lines()` d'un client `httpx` de streaming retourne des chaînes de caractères (`str`) et non des octets (`bytes`). Les tests unitaires simulant le flux de streaming SSE doivent obligatoirement mocker les trames réseau avec des chaînes de caractères, sous peine de crashs de type-mismatch au décodage.
+*   **[google-auth-httpx] : Rapprochement d'API streaming OAuth**  
+    Étant donné que le package `google-auth-httpx` n'est pas disponible de façon fiable sur PyPI, la solution la plus propre et la plus robuste consiste à utiliser `google.auth.transport.requests.Request()` exclusivement pour le rafraîchissement d'accès OAuth en arrière-plan, et à employer un client `httpx` standardisé pour les requêtes streaming de jetons. Cela élimine le besoin d'adaptateurs tiers.
 
 ---
 
@@ -489,14 +690,20 @@ Session agent
 | Config Gemini | `~/.gemini/GEMINI.md` | @import natif (auto) |
 | Config Codex | `~/.codex/AGENTS.md` | sync-agents.sh (auto) |
 | Config Vibe | `~/.vibe/instructions.md` | sync-agents.sh (auto) |
+| Config OpenCode | `~/.config/opencode/AGENTS.md` | sync-agents.sh (auto) |
+| Config Antigravity (AGY) | règles globales `agy` + `AGENTS.md` du workspace | sync-agents.sh (auto) + lecture workspace |
+| Vault de connaissance | `~/DEV/active/knowledge-vault/` (OKF) | Lecture par tous (grep) ; §12bis |
 | Projets opt-in | `~/DEV/active/*/AGENTS.md` | sync-agents.sh si marqueurs |
 | Skills partagees | `~/.agents/skills/` | Symlinks vers ~/.claude/skills/ |
 | Passations | `~/DEV/HANDOFF-*.md` | Fichiers temporaires par session |
 
 ### Infrastructure d'Automatisation
 
+> 🗺️ **Carte unique de TOUS les automatismes** (launchd, hooks, crons, kill-switches) : `~/DEV/OPERATIONS.md`. Lire en premier pour reprendre le contrôle.
+
 | Fichier | Role |
 |---------|------|
+| `~/DEV/OPERATIONS.md` | Runbook — inventaire de tous les jobs/hooks + comment inspecter/désactiver |
 | `~/DEV/scripts/sync-agents.sh` | Script de propagation (global + projets opt-in) |
 | `~/DEV/scripts/hook-claude-sync.sh` | Hook Claude Code — sync apres Write/Edit sur .AI_AGENTS.md |
 | `~/.claude/settings.json` | Enregistrement du hook PostToolUse |
@@ -540,5 +747,45 @@ Le hook est versionné sous `~/DEV/scripts/git-hooks/pre-commit`. Pour le (ré)i
 6. **Historique d'avant Git** : les 17 commits de l'ancien dépôt `scripts/` sont archivés dans `~/DEV/audits/2026-05/.archive/scripts-git-history/`. Consultation : `git --git-dir=~/DEV/audits/2026-05/.archive/scripts-git-history/.git log`.
 
 **Pour un nouvel agent IA arrivant** : `cd ~/DEV && git status` pour comprendre l'état courant. Tout commit doit respecter la discipline ci-dessus.
+
+---
+
+## 12bis. Vault de Connaissance (OKF) — Mémoire Partagée
+
+> Mémoire partagée homme/IA au format **OKF** (Open Knowledge Format, Google Cloud) : dossiers de `.md` + frontmatter YAML, 1 concept/fichier, liens markdown = graphe. Lisible par l'humain (Obsidian) **et** par tout agent (grep). **Tous les agents doivent l'utiliser.**
+
+- **Emplacement** : `~/DEV/active/knowledge-vault/`
+- **Schéma & types** : `~/DEV/active/knowledge-vault/okf.schema.md` (types : `concept`, `lesson`, `idea`, `session`, `reference`, `project-pointer`, `adr`, `moc`).
+
+**Protocole de LECTURE** (économie de tokens — grep d'abord, jamais de Read massif) :
+1. `knowledge-vault/index.md` (L0) → `knowledge-vault/CRITICAL_FACTS.md`.
+2. Cibler : `grep -rn "^type: <type>" ~/DEV/active/knowledge-vault/` ou ouvrir l'`index.md` du bundle voulu.
+3. Suivre les liens `[[...]]` pour traverser le graphe.
+
+**Protocole d'ÉCRITURE** :
+- Capture rapide → `inbox/` (frontmatter minimal, `type` requis).
+- Échange/session → *append* dans `journal/AAAA/MM/AAAA-MM-JJ.md` (type `session`). **Ne jamais réécrire une session passée** (append-only).
+- Savoir durable → `knowledge/{concepts,lessons,references}/` en phrases complètes, avec `description` et liens.
+- Idée → `ideas/` (`status: seed|sprouting|ready`).
+
+**Règle d'or anti-hallucination** : pour les faits du vault, n'utilise **que** les notes ; si une note ne couvre pas le sujet, **dis-le** ; **cite la note source `[[...]]`**.
+
+**Propagation** : les `lessons` du vault remontent vers `§11` via le skill `vault-sync`, puis `sync-agents.sh` diffuse à tous les agents (Codex, Vibe, OpenCode, Gemini, AGY).
+
+**Vérifier / interroger le vault (commandes universelles, tout agent).** Outil stdlib sans dépendance, exécutable par n'importe quel agent capable de lancer un shell :
+cd ~/DEV/active/knowledge-vault
+python3 meta/okf-graph.py --health     # bilan structurel (schéma, liens cassés, orphelins, fraîcheur) ; exit 1 si bloquant
+python3 meta/okf-graph.py --type lesson | --tag <tag> | --neighbors <note> | --hubs 10 | --orphans
+python3 meta/okf-graph.py --check      # exit 1 si liens [[...]] cassés (utilisé par le pre-commit du vault)
+Quand l'utilisateur demande « le bilan de santé / interroge le vault », lancer ces commandes (pas besoin d'un skill spécifique). Un cron mensuel (`com.rodolphe.vault-health`) peut aussi écrire `meta/health-latest.md`.
+
+**Maintenir sans dénaturer (TOUT agent éditant le vault).** Invariants à respecter sous peine de dégrader la base :
+- 1 concept = 1 fichier ; `type` ∈ liste fermée (`concept`, `lesson`, `idea`, `session`, `reference`, `project-pointer`, `adr`, `moc`) ; frontmatter requis `type` + `title` + `description`. Ajouter un `type` = créer un ADR dans `decisions/`.
+- Notes-concepts en `kebab-case.md` ; MOC en `index.md`. Détail : `knowledge-vault/okf.schema.md`.
+- `journal/` = **append-only** : ne JAMAIS réécrire une session passée. `projects/` = pointeurs, jamais dupliquer un repo.
+- Chaque note pointe vers ≥ 1 hub (zéro orphelin) ; citer la note source `[[...]]` (anti-hallucination).
+- Éditions **ciblées**, pas de réécriture en masse ; suppression → `mv ~/.Trash/` (jamais `rm`) ; aucun secret.
+- **Avant tout commit du vault** : `python3 meta/okf-graph.py --check` doit passer (le pre-commit le force). Vérifier la santé : `--health`.
+- Après une session : `vault-session-save` (trace) puis `vault-sync` (propage les leçons vers §11 + agents).
 
 <!-- END:UNIVERSAL -->
